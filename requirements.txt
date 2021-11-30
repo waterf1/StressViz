@@ -1,6 +1,5 @@
 brotlipy==0.7.0
 certifi==2021.10.8
-conda==4.11.0
 dash-core-components==1.3.1
 dash-html-components==1.0.1
 dash-renderer==1.1.2
