@@ -1,4 +1,4 @@
-Bottleneck @ file:///C:/ci/bottleneck_1607557040328/work
+
 brotlipy==0.7.0
 certifi==2021.10.8
 cffi @ file:///C:/ci/cffi_1625831756778/work
