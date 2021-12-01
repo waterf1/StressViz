@@ -18,6 +18,7 @@ from sklearn.cluster import DBSCAN
 import numpy as np
 
 app = dash.Dash(__name__)
+server = app.server
 
 def cluster_DBSCAN(LOCATION):
     EPSILON_METRE = 20 #@param {type:"slider", min:25, max:500, step:25}
