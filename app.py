@@ -4,7 +4,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 # from dash import dash.dcc
 # from dash import html
-# from dash.html import Label
+from dash_html_components import Label
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -16,6 +16,8 @@ import io
 import sklearn
 from sklearn.cluster import DBSCAN
 import numpy as np
+import datetime as dt
+import time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -51,7 +53,7 @@ def cluster_DBSCAN(LOCATION):
 # @return dataframe 
 #
 def showEsmRelative(participant):
-    path_esm = './data/P' + participant + '/esm_data.csv'
+    path_esm = './data/esm_data.csv'
 
     with open(path_esm) as f:
         head = f.readline()
@@ -61,6 +63,7 @@ def showEsmRelative(participant):
     df_esm = pd.read_csv(io.StringIO(text),parse_dates=['responseTime_KDT'])
     df_esm = df_esm.rename(columns={'responseTime_unixtimestamp':'timestamp'})
     df_esm = df_esm.drop(['responseTime_KDT'], axis=1)
+    df_esm.sort_values(by='UID', inplace=True)
     # print("df_esm.head()", df_esm.head())
     return df_esm
     
@@ -116,8 +119,8 @@ def toDateTime(df, unit='ms'):
 def showHearRate():
     df_heartrate = pd.DataFrame([])
     title = 'HeartRate'
-    path = './P1511'
-    df_heartrate = readFile('HeartRate', 1511)
+    path = './P0701'
+    df_heartrate = readFile('HeartRate', 701)
     # files = [f for f in os.listdir(path) if (title+'-' in f)]
 
     # for file in files:
@@ -133,7 +136,7 @@ def showHearRate():
 #
 # df_esm
 #
-df_esm = showEsmRelative('1511')
+df_esm = showEsmRelative('701')
 df_esm.sort_values(by='UID', inplace=True)
 df_esm = timeAndDate(toDateTime(df_esm, 's'))
 
@@ -151,14 +154,14 @@ df_esm_relative['UID'] = df_esm_relative['UID'].astype('category')
 df_esm_median = df_esm_relative.reset_index('date')[['UID', 'Stress']]
 df_esm_median = df_esm_median.groupby('UID').median()
 df_esm_median = df_esm_median.sort_values(by=['Stress'], axis=0).reset_index("UID")
-esm_uid_by_median = df_esm_median['UID'].unique()
+esm_uid_by_median = sorted(df_esm_median['UID'].unique())
 # print(df_esm_median['UID'].unique())
 # uidToMedian = zip()
 
 #
 # df_location
 #
-df_location = showLocation(1511)
+df_location = showLocation(701)
 print('df_location\n', df_location.head())
 
 #
@@ -192,7 +195,9 @@ df_heartrate = toDateTime(showHearRate())
 df_heartrate_resampled = resample(df_heartrate, '1000L')
 df_heartrate_resampled = timeAndDate(df_heartrate_resampled)
 
-heartrate = pd.read_csv('./HeartRate.csv')
+heartrate = pd.DataFrame()
+for i in range(1, 8):
+    heartrate = pd.concat([heartrate, pd.read_csv(f"./data/P0701/HeartRate{i}.csv")])
 heartrate.set_index('timestamp', drop=True, inplace=True) 
 heartrate.drop(columns = ['Quality'], inplace=True) 
 heartrate.columns = ['BPM']
@@ -212,7 +217,7 @@ df = K_EmoPhone_1000L
 
 
 
-df_location_stress = showLocationStress(1511)
+df_location_stress = showLocationStress(701)
 # print(df_heartrate_resampled.head())
 # print(df_location_resampled.head())
 CLUSTER_DBSCAN = cluster_DBSCAN(df_location_stress[['latitude', 'longitude', 'Stress']])
@@ -239,24 +244,57 @@ app.layout = html.Div(
         ]),         
         html.Div(
             [
-                html.Label("Select Your ID"),
-                dcc.Dropdown(
-                    id="uid-dropdown",
-                    options=[
-                        {"label": id, "value": id} for id in df_esm_relative.UID.unique().tolist()       
-                        # {"label": date, "value": date} for date in ['Average'] + df_heartrate_resampled.date.unique().tolist()       
-                        # {"label": s, "value": s} for s in df.Status.unique()
-                    ],
-                    className="dropdown",
+                html.Div(
+                    [
+                        html.Label("UID"),
+                        dcc.Dropdown(
+                            id="UID-dropdown",
+                            options=[
+                                {"label": s, "value": s} for s in df_esm.UID.unique()
+                            ],
+                            className="dropdown",
+                        ),
+                    ]
                 ),
             ]
-        ),      
+        ),
         html.H2(
             "Stress Level by Time",
         ),
         html.P(
-            "What are the patterns in my stress? What are the possible effects of time and activities(smartphone usages) on stress?",
-        ),         
+            "What are the patterns in my stress? What are the possible effects of time and activities on stress?",
+        ),
+        html.Div(
+            [html.Div(
+                [
+                    html.Label("Visible"),
+                    dcc.Dropdown(
+                        id="Visible-dropdown",
+                        options=[
+                            {"label": 'Heart BPM', "value": 'Heart BPM'},
+                            {"label": 'App Usage', "value": 'App Usage'},
+                            {"label": 'Physical Activity', "value": 'Physical Activity'}
+                        ],
+                        value=[],
+                        multi=True,
+                        className="dropdown2",
+                    ),
+                ]
+            ),
+            html.Div(
+                [
+                    html.Label("Date"),
+                    dcc.DatePickerSingle(
+                        id='Calendar',
+                        min_date_allowed=dt.date(2019, 5, 1),
+                        max_date_allowed=dt.date(2019, 5, 31),
+                        initial_visible_month=dt.date(2019, 5, 15),
+                        date=None,
+                        className='calendar'
+                    ),
+                ]
+            ),]
+        ),
         html.Div(dcc.Graph(id="stress vs app usage", className="chart")),
         html.H2(
             "Relative View of Stress",
@@ -335,68 +373,157 @@ app.layout = html.Div(
 
 @app.callback(
     Output("stress vs app usage", "figure"),
-    Input("uid-dropdown", "value"),
+    Input("UID-dropdown", "value"),
+    Input("Visible-dropdown", "value"),
+    Input("Calendar", "date")
 )
-def update_figure(selected_UID):
-    print("selected_UID", selected_UID)
-    if selected_UID == None:        
-        return go.Figure()
+def update_figure(selected_UID, vis_options, date_value):
+    if (selected_UID == None):
+        fig_tmp = go.Figure()
+        fig_tmp.update_layout(title='No Data :(', plot_bgcolor='rgba(0, 0, 0, 0.1)')
+        return fig_tmp
     else:
+        df_esm = pd.read_csv("./data/esm_data.csv")
+        df_esm.sort_values(by='UID', inplace=True)
         df = df_esm.loc[lambda x: x['UID'] == selected_UID, :]
 
-        # df['time'] = pd.to_datetime((df['responseTime_unixtimestamp'] + 32400) * 1000, unit='ms')
-        # df.sort_values(by='time', inplace=True)
+        df['time'] = pd.to_datetime((df['responseTime_unixtimestamp'] + 32400) * 1000, unit='ms')
+        df.sort_values(by='time', inplace=True)
         df['Stress'] = df['Stress'].astype('category')
 
-        fig_esm = go.Scatter(name = 'stress',
+        fig_esm = go.Scatter(name = 'stress level',
                             x = df.time, y = df.Stress,
-                            marker_color = 'orange',
-                            mode = 'lines+markers',)
-
+                            marker = {'color': [0 if x > 0 else 1 for x in df['Stress']], 'colorscale': [[0, 'red'], [0.5, 'blue'], [1, 'green']], 'size': 10},
+                            line = {'color': 'black'},
+                            mode = 'lines+markers')
+        
+        fig_list = []
+        
         df_app = pd.DataFrame()
         string_UID = ''
         if selected_UID < 1000:
             string_UID = '0' + str(selected_UID)
         else:
             string_UID = str(selected_UID)
-        for i in range(1, 8):
-            df_app = pd.concat([df_app, pd.read_csv(f"./data/P{string_UID}/AppUsageEventEntity{i}.csv")])
+        
+        try:
+            for i in range(1, 8):
+                df_app = pd.concat([df_app, pd.read_csv(f"./data/P{string_UID}/AppUsageEventEntity{i}.csv")])
+        except FileNotFoundError:
+            fig_tmp = go.Figure()
+            fig_tmp.update_layout(title='No Data :(', plot_bgcolor='rgba(0, 0, 0, 0.1)')
+            return fig_tmp
+        else:
+            if 'Heart BPM' in vis_options:
+                df_hr = pd.DataFrame()
+                
+                for i in range(1, 8):
+                    df_hr = pd.concat([df_hr, pd.read_csv(f"./data/P{string_UID}/HeartRate{i}.csv")])
+                
+                df_hr = df_hr.loc[lambda x: x['Quality'] == 'LOCKED']
+                df_hr['time'] = pd.to_datetime((df_hr['timestamp'] + 32400000), unit='ms')
+                df_hr.set_index('time', inplace=True)
+                
+                df_hr_re = pd.DataFrame()
+                df_hr_re['BPM'] = df_hr.BPM.resample('1T').first()
+                
+                fig_hr = go.Scatter(name='BPM', x=df_hr_re.index, y=df_hr_re['BPM'], mode='lines', line_color='blue')
+                fig_list.append(fig_hr)
+            
+            if 'App Usage' in vis_options:
+                df_app = df_app.loc[lambda x: (x['type'] == 'MOVE_TO_FOREGROUND') | (x['type'] == 'MOVE_TO_BACKGROUND'), :]
+                df_app['time'] = pd.to_datetime((df_app['timestamp'] + 32400000), unit='ms')
 
-        df_app = readFile('AppUsageEventEntity', selected_UID)
-        df_app = df_app.loc[lambda x: (x['type'] == 'MOVE_TO_FOREGROUND') | (x['type'] == 'MOVE_TO_BACKGROUND'), :]
-        df_app['time'] = pd.to_datetime(df_app['timestamp'], unit='ms')
+                df_msg = df_app.loc[lambda x: (x['name'] == '카카오톡') | (x['name'] == '텔레그램') | (x['name'] == 'WhatsApp'), :][['time', 'name', 'type']]
+                df_msg['app_category'] = 'Messengers'
+                df_msg.set_index('time', inplace=True)
+                df_sns = df_app.loc[lambda x: (x['name'] == 'Facebook') | (x['name'] == '트위터') | (x['name'] == 'Instagram'), :][['time', 'name', 'type']]
+                df_sns['app_category'] = 'Social Media'
+                df_sns.set_index('time', inplace=True)
+                df_youtube = df_app.loc[lambda x: (x['name'] == 'YouTube') | (x['name'] == '네이버TV') | (x['name'] == 'Twitch'), :][['time', 'name', 'type']]
+                df_youtube['app_category'] = 'Streaming'
+                df_youtube.set_index('time', inplace=True)
+                df_webtoon = df_app.loc[lambda x: (x['name'] == '네이버 웹툰') | (x['name'] == '다음웹툰') | (x['name'] == '카카오페이지') | (x['name'] == '레진코믹스'), :][['time', 'name', 'type']]
+                df_webtoon['app_category'] = 'Webtoon'
+                df_webtoon.set_index('time', inplace=True)
+                df_music = df_app.loc[lambda x: (x['name'] == 'Youtube Music') | (x['name'] == '지니 뮤직') | (x['name'] == 'VIBE'), :][['time', 'name', 'type']]
+                df_music['app_category'] = 'Music'
+                df_music.set_index('time', inplace=True)
+                df_internet = df_app.loc[lambda x: (x['name'] == '삼성 인터넷') | (x['name'] == 'Chrome') | (x['name'] == '디시인사이드') | (x['name'] == '네이버 카페') | (x['name'] == 'NAVER'), :][['time', 'name', 'type']]
+                df_internet['app_category'] = 'Internet'
+                df_internet.set_index('time', inplace=True)
 
-        df_kakao = df_app.loc[lambda x: x['name'] == '카카오톡', :][['time', 'name', 'type']]
-        df_kakao.set_index('time', inplace=True)
-        df_youtube = df_app.loc[lambda x: x['name'] == 'YouTube', :][['time', 'name', 'type']]
-        df_youtube.set_index('time', inplace=True)
+                df_comb = pd.concat([df_msg, df_sns, df_youtube, df_webtoon, df_music, df_internet])
 
-        df_comb = pd.concat([df_kakao, df_youtube])
+                df_re = pd.DataFrame()
+                df_re['name'] = df_comb.name.resample('1T').first()
+                df_re['app_category'] = df_comb.app_category.resample('1T').first()
+                df_re['type_first'] = df_comb.type.resample('1T').first()
+                df_re['type_last'] = df_comb.type.resample('1T').last()
+                df_re['using'] = (df_re['name'].notnull() * 1).astype(str)
+                df_re['time'] = df_re.index
 
-        df_re = pd.DataFrame()
-        df_re['name'] = df_comb.name.resample('1T').first()
-        df_re['type_first'] = df_comb.type.resample('1T').first()
-        df_re['type_last'] = df_comb.type.resample('1T').last()
-        df_re['using'] = (df_re['name'].notnull() * 1).astype(str)
-        df_re['time'] = df_re.index
+                fig_app = go.Scatter(name='app_name', x=df_re['time'], y=df_re['app_category'], mode='markers', marker={'color': 'black', 'size': 10}, hovertext=list(df_re['name']))
+                fig_list.append(fig_app)
 
-        fig_app = go.Scatter(x=df_re['time'], y=df_re['name'], mode='markers', name="Apps")
+            if 'Physical Activity' in vis_options:
+                df_act = pd.DataFrame()
+                for i in range(1, 8):
+                    df_act = pd.concat([df_act, pd.read_csv(f"./data/P{string_UID}/PhysicalActivityTransitionEntity{i}.csv")])
+                df_act['time'] = pd.to_datetime((df_act['timestamp'] + 32400000), unit='ms')
+                df_act.set_index('time', inplace=True)
+                    
+                df_act_re = pd.DataFrame()
+                df_act_re['transition'] = df_act.transitionType.resample('1T').last()
+                df_act_re.replace(to_replace=[None], value=np.nan, inplace=True)
+                df_act_re.fillna(method='ffill', inplace=True)
+                    
+                def aux(s):
+                    options = ['IN_VEHICLE', 'RUNNING', 'STILL', 'ON_BICYCLE', 'WALKING']
+                    opt_clrs = ['blue', 'magenta', 'rgba(0, 0, 0, 0)', 'red', 'cyan']
+                    for i in range(6):
+                        if options[i] in s:
+                            return (options[i], opt_clrs[i])
+                    return ('UNKNOWN', 'black')
+                        
+                df_act_re['state'] = df_act_re['transition'].map(lambda x: aux(x)[0])
+                df_act_re['color'] = df_act_re['transition'].map(lambda x: aux(x)[1])
+                df_act_re['name'] = 'Physical State'
+                
+                fig_act = go.Scatter(name='state', x=df_act_re.index, y=df_act_re['name'], mode='markers', marker=dict(color = df_act_re['color'], size=10), hovertext=list(df_act_re['state']))
+                fig_list.append(fig_act)
+            
+            l = len(fig_list)
+            vis_opt_list = []
+            if 'Heart BPM' in vis_options:
+                vis_opt_list.append('Heart BPM')
+            if 'App Usage' in vis_options:
+                vis_opt_list.append('App Usage')
+            if 'Physical Activity' in vis_options:
+                vis_opt_list.append('Physical Activity')
+            row_heights = [1] if l==0 else [0.5] + ( [(0.5)/l] * l )
+            subplot_titles = ['Stress-level'] + vis_opt_list
+            fig = make_subplots(rows=l+1, cols=1, row_heights=row_heights, shared_xaxes=True, subplot_titles=subplot_titles, vertical_spacing=0.05)
+            fig.add_trace(fig_esm, row=1, col=1)
+            for i in range(2, l+2):
+                fig.add_trace(fig_list[i-2], row=i, col=1)
+            fig.update_yaxes(range=[-3.5, 3.5], row=1, col=1)
+            fig.update_layout(xaxis={'type': 'date'}, title_text='Stress-level vs Time', height=800, title_x = 0.5, showlegend=False, plot_bgcolor='rgba(0, 0, 0, 0.1)')
+            
+            if date_value is not None:
+                date_L = [int(x) for x in date_value.split('-')]
+                fig.update_layout(
+                    xaxis=dict(
+                            range=[dt.date(date_L[0], date_L[1], date_L[2]), dt.date(date_L[0], date_L[1], date_L[2])+dt.timedelta(days=1)]
+                        )
+                    )
+            #fig.show()
 
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
-        fig.add_trace(fig_esm, row=1, col=1)
-        fig.add_trace(fig_app, row=2, col=1)
-        fig.update_layout(
-            xaxis = dict(
-
-            )
-        )
-        #fig.show()
-
-        return fig
+            return fig
 
 @app.callback(
     Output("Stress Relative View", "figure"),
-    Input("uid-dropdown", "value"),
+    Input("UID-dropdown", "value"),
 )
 def update_esm_relative(selected_UID):
 
@@ -413,14 +540,14 @@ def update_esm_relative(selected_UID):
     categoryorder = 'array', 
     categoryarray = esm_uid_by_median,         
     rangeslider=dict(
-            visible=True
+            visible=False
         ),)
     fig.layout.showlegend = False
     return fig
 
 @app.callback(
     Output("Stress by Location", "figure"),
-    Input("uid-dropdown", "value"),
+    Input("UID-dropdown", "value"),
 )
 def update_location(selected_UID):
     print('selected_UID', selected_UID)
@@ -495,7 +622,7 @@ def update_location(selected_UID):
 
     return fig
 
-@app.callback(
+("""@app.callback(
     Output("Stress by Heartrate", "figure"),
     Input("resampleTime-dropdown", "value"),
     Input("date-dropdown", "value"),
@@ -523,7 +650,7 @@ def update_heartrate(resampleInterval, selectedDate):
         font_color=colors["text"],
     )
 
-    return fig
+    return fig""")
 
 # def update_figure(selected_year, country_status, schooling):
 #     filtered_dataset = df[(df.Year == selected_year)]
